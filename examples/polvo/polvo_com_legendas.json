@@ -1,0 +1,86 @@
+{
+  "project_name": "O Polvo e Seus 3 Corações",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "introducao",
+      "duration": 5,
+      "background": "assets/polvo_gigante_nas_profundezas.png",
+      "camera_effect": "zoom_in",
+      "intensity": 0.45,
+      "transition": "crossfade",
+      "layers": []
+    },
+    {
+      "id": "revelacao_tres_coracoes",
+      "duration": 6,
+      "background": "assets/polvo_no_abismo_anatomia_luminescente.png",
+      "camera_effect": "ken_burns",
+      "intensity": 0.35,
+      "transition": "crossfade",
+      "layers": [
+        {
+          "asset": "assets/trio_de_corações_neon_brilhantes.png",
+          "animation": "pop_in",
+          "start": 0.5,
+          "x": 0.5,
+          "y": 0.65
+        }
+      ]
+    },
+    {
+      "id": "funcionamento_coracoes",
+      "duration": 7,
+      "background": "assets/polvo_no_abismo_anatomia_luminescente.png",
+      "camera_effect": "pan_horizontal",
+      "intensity": 0.45,
+      "transition": "crossfade",
+      "layers": [
+        {
+          "asset": "assets/trio_de_corações_neon_brilhantes.png",
+          "animation": "fade_in",
+          "start": 0.3,
+          "x": 0.5,
+          "y": 0.7
+        }
+      ]
+    },
+    {
+      "id": "polvo_em_movimento",
+      "duration": 7,
+      "background": "assets/polvo_sob_raios_de_luz_submarinos.png",
+      "camera_effect": "pan_horizontal",
+      "intensity": 0.65,
+      "transition": "crossfade",
+      "layers": []
+    },
+    {
+      "id": "encerramento",
+      "duration": 5,
+      "background": "assets/polvo_gigante_nas_profundezas.png",
+      "camera_effect": "zoom_out",
+      "intensity": 0.35,
+      "transition": "fade_to_black",
+      "layers": [
+        {
+          "asset": "assets/trio_de_corações_neon_brilhantes.png",
+          "animation": "fade_in",
+          "start": 1.0,
+          "x": 0.5,
+          "y": 0.72
+        }
+      ]
+    }
+  ],
+  "subtitles": {
+    "file": "legendas_exemplo.srt",
+    "style": "dynamic",
+    "font_size": 64,
+    "color": "#FFFFFF",
+    "outline_color": "#000000",
+    "outline_width": 5,
+    "margin_bottom": 360
+  }
+}
