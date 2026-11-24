@@ -2,12 +2,9 @@ import math
 
 from PIL import Image, ImageOps
 
+from .motion import ease
+
 RESAMPLE = Image.Resampling.LANCZOS
-
-
-def ease(value):
-    value = min(1, max(0, value))
-    return value * value * (3 - 2 * value)
 
 
 def load_image(path):
@@ -41,7 +38,7 @@ class Composition:
     def frame(self, scene, media, index):
         width, height = self.size
         background, layers = media
-        progress = ease(index / max(1, self.project.frames(scene.duration) - 1))
+        progress = ease(index / max(1, self.project.frames(scene.duration) - 1), scene.camera_easing)
         amount = scene.intensity
         effect = scene.camera_effect
         zoom = {
@@ -66,7 +63,9 @@ class Composition:
             if time < layer.start:
                 continue
             phase = ease((time - layer.start) / layer.duration)
-            if layer.animation == "pop_in":
+            if layer.animation == "pulse":
+                scale = 1 + .18 * math.sin(math.pi * phase) ** 2
+            elif layer.animation == "pop_in":
                 # slight overshoot followed by a smooth settling
                 scale = .3 + .7 * phase + .12 * math.sin(math.pi * phase)
             else:
@@ -74,7 +73,9 @@ class Composition:
             layer_width = max(1, round(width * layer.width * scale))
             layer_height = max(1, round(layer_width * image.height / image.width))
             overlay = image.resize((layer_width, layer_height), RESAMPLE)
-            opacity = layer.opacity * (phase if layer.animation in {"fade_in", "float_in"} else 1)
+            if layer.animation == "spin_in" and phase < 1:
+                overlay = overlay.rotate(90 * (1 - phase), Image.Resampling.BICUBIC, expand=True)
+            opacity = layer.opacity * (phase if layer.animation in {"fade_in", "float_in", "rise_in", "spin_in"} else 1)
             if opacity < 1:
                 overlay.putalpha(overlay.getchannel("A").point(lambda alpha: round(alpha * opacity)))
             x_center = layer.x * width
@@ -82,5 +83,9 @@ class Composition:
                 x_center -= (1 - phase) * width * .12
             if layer.animation == "slide_in":
                 x_center = -layer_width / 2 + (x_center + layer_width / 2) * phase
-            frame.alpha_composite(overlay, (round(x_center - layer_width / 2), round(layer.y * height - layer_height / 2)))
+            y_center = layer.y * height
+            if layer.animation == "rise_in":
+                y_center += (1 - phase) * height * .15
+            frame.alpha_composite(overlay, (round(x_center - overlay.width / 2),
+                                            round(y_center - overlay.height / 2)))
         return frame.convert("RGB")

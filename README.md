@@ -2,28 +2,28 @@
 
 **Motor de criação de vídeos narrativos com Python, imagens e animações.**
 
-O StoryMotion AI transforma um projeto JSON em um vídeo **MP4 (H.264)**, combinando fotografias, imagens PNG com transparência, movimentos de câmera, animações de camadas, transições, narração e legendas SRT. Foi pensado para histórias visuais, curiosidades, conteúdos educativos e vídeos verticais.
+O StoryMotion AI transforma um projeto JSON em um vídeo **MP4 (H.264)**, combinando fotografias, imagens PNG com transparência, movimentos de câmera, animações de camadas, transições, narração e legendas manuais ou automáticas. Foi pensado para histórias visuais, curiosidades, conteúdos educativos e vídeos verticais.
 
-> **Estado atual:** ferramenta de **linha de comando (CLI)**. A aplicação ainda não possui interface gráfica, transcrição automática ou legendas sincronizadas palavra por palavra.
+> Ferramenta de **linha de comando (CLI)** para montar vídeos narrativos a partir de cenas definidas em JSON.
 
 ## ✨ Funcionalidades
 
 - Renderização de vídeos em **9:16** (1080 × 1920, por exemplo), com outras resoluções pares configuráveis.
 - Imagens de fundo JPG/PNG, preservando a proporção mediante ajuste de enquadramento.
 - Camadas de PNG transparente com posição, largura e opacidade configuráveis.
-- Animações de camada: `none`, `fade_in`, `slide_in`, `pop_in`, `float_in`.
+- Animações de camada: `none`, `fade_in`, `slide_in`, `pop_in`, `float_in`, `rise_in`, `spin_in`, `pulse`.
 - Movimentos de câmera: `none`, `zoom_in`, `zoom_out`, `pan_horizontal`, `pan_vertical`, `ken_burns`, `cinematic_zoom`, `drift`.
-- Transições: `cut`, `crossfade`, `fade_to_black`.
+- Transições: `cut`, `crossfade`, `fade_to_black`, `dip_to_black`, `slide_left`.
 - Narração opcional por arquivo **MP3, WAV ou M4A**.
-- Legendas **SRT** incorporadas à imagem, em estilos `clean` e `dynamic`.
+- Legendas incorporadas à imagem, com SRT manual ou transcrição local e destaque sincronizado por palavra.
 - Validação do projeto JSON com Pydantic e exportação via FFmpeg.
 - Resolução, FPS e qualidade de compressão configuráveis.
 
 ## 🧰 Requisitos
 
-- **Python 3.11 ou superior** (Python 3.12 é uma boa opção no Windows 11).
+- **Python 3.12** (no Windows 11, use a edição de 64 bits).
 - **FFmpeg** instalado com o codificador `libx264`, acessível pelo `PATH` ou indicado por `--ffmpeg`.
-- Dependências Python definidas em `requirements.txt`: **Pillow** e **Pydantic**.
+- Dependências em `requirements.txt`, incluindo Pillow, Pydantic e Faster-Whisper com uma versão compatível do PyAV.
 
 Verifique o FFmpeg no PowerShell:
 
@@ -44,7 +44,7 @@ Feche e reabra o terminal após a instalação. Confira novamente com `ffmpeg -v
 Abra a pasta do projeto no VS Code e execute no PowerShell:
 
 ```powershell
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
@@ -90,7 +90,9 @@ storymotion-ai/
 ├── storymotion/
 │   ├── models.py          # Modelos e validação do JSON
 │   ├── composition.py     # Câmera e composição das camadas
-│   ├── subtitles.py       # Leitura de SRT e desenho das legendas
+│   ├── motion.py          # Curvas e composição de transições
+│   ├── subtitles.py       # SRT e desenho das legendas
+│   ├── transcription.py   # Faster-Whisper e agrupamento por palavra
 │   └── render.py          # Linha do tempo e exportação com FFmpeg
 ├── examples/
 │   └── polvo/
@@ -104,7 +106,8 @@ storymotion-ai/
 │           └── trio_de_corações_neon_brilhantes.png
 └── tests/
     ├── test_render.py
-    └── test_subtitles.py
+    ├── test_subtitles.py
+    └── test_transcription.py
 ```
 
 Os arquivos de mídia são resolvidos **em relação à pasta em que está o JSON**, não necessariamente em relação à pasta de execução do terminal.
@@ -180,20 +183,22 @@ python main.py meu_video/historia.json meu_video/video_final.mp4
 | `width`, `height` | Dimensões pares do vídeo, até 3840 pixels por eixo. |
 | `fps` | `24`, `30` ou `60`. |
 | `audio` | Caminho opcional para narração MP3, WAV ou M4A. |
-| `subtitles` | Configuração opcional de legenda SRT. |
+| `subtitles` | Configuração opcional de SRT manual ou transcrição automática. |
 | `scenes` | Lista ordenada de cenas; cada uma exige `id`, `duration` e `background`. |
 | `camera_effect` | Movimento de câmera aplicado ao fundo. |
+| `camera_easing` | Curva da câmera. O padrão é `smoothstep`. |
 | `intensity` | Intensidade do movimento, entre `0` e `1`. |
 | `layers` | Lista de imagens sobrepostas, na ordem de composição. |
 | `layers[].start` | Segundo de início da animação, **relativo à cena**. |
-| `layers[].duration` | Duração da entrada da camada. |
+| `layers[].duration` | Duração da animação da camada. |
 | `layers[].x`, `y` | Posição normalizada do centro (`0` a `1`). |
 | `layers[].width` | Largura relativa à largura do quadro (`0` a `1`). |
 | `layers[].opacity` | Opacidade entre `0` e `1`. |
-| `transition` | `cut`, `crossfade` ou `fade_to_black`. |
+| `transition` | Efeito aplicado na saída para a próxima cena. |
+| `transition_easing` | Curva da transição. O padrão é `smoothstep`. |
 | `transition_duration` | Duração da transição entre cenas. |
 
-**Duração final:** o total pode ser menor que a soma de `duration` das cenas, porque `crossfade` sobrepõe trechos de cenas consecutivas. Para vídeos destinados a programas que exigem mais de um minuto, verifique a duração real do MP4.
+**Duração final:** o total pode ser menor que a soma de `duration` das cenas, porque `crossfade`, `dip_to_black` e `slide_left` sobrepõem trechos de cenas consecutivas. Para vídeos destinados a programas que exigem mais de um minuto, verifique a duração real do MP4.
 
 ## 🔊 Narração e legendas
 
@@ -239,16 +244,54 @@ Inclua no JSON:
 - `dynamic`: frase com entrada visual suave.
 - `font_file`: caminho opcional de fonte TTF compatível.
 
-As legendas são **gravadas nos quadros do vídeo** (não são uma faixa de texto desativável). Os tempos precisam ser preparados e revisados manualmente; o StoryMotion AI **ainda não transcreve áudio**, nem destaca cada palavra individualmente.
+O SRT manual fornece os tempos das frases. As legendas são **gravadas nos quadros do vídeo**.
+
+### Transcrição automática e destaque por palavra
+
+Informe `audio` com a narração em MP3 ou WAV e use `subtitles.transcription` no lugar de `subtitles.file`. Este trecho é um objeto JSON com os dois campos a incorporar ao projeto:
+
+```json
+{
+  "audio": "assets/narracao.mp3",
+  "subtitles": {
+    "transcription": {
+      "model": "base",
+      "language": "pt",
+      "words_per_cue": 5
+    },
+    "style": "karaoke",
+    "highlight_color": "#FFE44D",
+    "font_size": 64,
+    "margin_bottom": 350
+  }
+}
+```
+
+O Faster-Whisper roda localmente em CPU com quantização INT8. Na primeira execução com um nome como `tiny` ou `base`, o modelo é baixado para o cache do Hugging Face. Com o modelo em cache, é possível transcrever offline. Também é possível fornecer o caminho absoluto de uma pasta local de modelo CTranslate2. A transcrição dispensa chaves e APIs pagas.
+
+Omita `language` para detectar o idioma. `words_per_cue` aceita de 1 a 12 palavras e o agrupamento também respeita pausas de fala. O estilo `karaoke` usa os tempos individuais retornados pelo modelo para destacar a palavra ativa com cor e movimento. Os estilos `clean` e `dynamic` também aceitam transcrição automática e mostram a frase inteira.
+
+```powershell
+.\.venv\Scripts\python.exe main.py meu_video/historia.json meu_video/saida.mp4 --export-srt meu_video/saida.srt
+```
+
+`--export-srt` grava um novo arquivo com os tempos das frases, limitado à duração final do vídeo. O destaque por palavra fica incorporado no MP4. Revise a transcrição e os tempos antes de publicar, sobretudo com áudio ruidoso ou com música. A duração e a ordem das cenas continuam definidas pelo JSON.
 
 ## 🎞️ Efeitos disponíveis
 
 | Tipo | Valores aceitos |
 | --- | --- |
 | Câmera | `none`, `zoom_in`, `zoom_out`, `pan_horizontal`, `pan_vertical`, `ken_burns`, `cinematic_zoom`, `drift` |
-| Camada | `none`, `fade_in`, `slide_in`, `pop_in`, `float_in` |
-| Transição | `cut`, `crossfade`, `fade_to_black` |
-| Legendas | `clean`, `dynamic` |
+| Camada | `none`, `fade_in`, `slide_in`, `pop_in`, `float_in`, `rise_in`, `spin_in`, `pulse` |
+| Transição | `cut`, `crossfade`, `fade_to_black`, `dip_to_black`, `slide_left` |
+| Easing | `smoothstep`, `smootherstep`, `sine_in_out`, `linear` |
+| Legendas | `clean`, `dynamic`, `karaoke` |
+
+Use `camera_easing: "smootherstep"` em uma cena para aceleração e desaceleração graduais no início e no fim. `sine_in_out` oferece uma curva senoidal e `linear` mantém a progressão constante.
+
+`rise_in` sobe e revela o PNG, `spin_in` gira e revela a camada até estabilizar, e `pulse` aumenta a escala uma vez antes de voltar ao tamanho original. Todos respeitam a transparência do PNG e a opacidade da camada.
+
+`slide_left` desliza as duas cenas para a esquerda. `dip_to_black` escurece a cena atual e revela a próxima dentro da sobreposição, com pelo menos três quadros. `fade_to_black` mantém o comportamento anterior, escurecendo a cena atual antes do corte. `transition_easing` controla o andamento desses efeitos.
 
 > As animações atuais são efeitos programados sobre imagens estáticas; elas não equivalem a geração de vídeo por IA ou animação 3D.
 
@@ -261,11 +304,12 @@ python main.py --help
 Sintaxe:
 
 ```text
-python main.py PROJECT_JSON OUTPUT_MP4 [--ffmpeg CAMINHO] [--crf N]
+python main.py PROJECT_JSON OUTPUT_MP4 [--ffmpeg CAMINHO] [--crf N] [--export-srt CAMINHO]
 ```
 
 - `--ffmpeg`: caminho explícito para `ffmpeg.exe`, quando fora do `PATH`.
 - `--crf`: qualidade H.264 de `0` a `51` (padrão `20`; valores menores tendem a resultar em melhor qualidade e arquivos maiores).
+- `--export-srt`: exporta as legendas da transcrição para um novo SRT.
 
 ## ✅ Testes
 
@@ -275,7 +319,7 @@ Execute:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Os testes cobrem validação e parte da renderização e das legendas. Testes de exportação que utilizem FFmpeg dependem de uma instalação funcional do executável.
+A suíte cobre compatibilidade com os exemplos, efeitos, sincronização e exportação. Os testes automatizados de transcrição usam dados controlados e dispensam downloads de modelos. Os testes de MP4 usam FFmpeg e FFprobe quando disponíveis.
 
 ## 🛠️ Solução de problemas
 
@@ -317,8 +361,6 @@ Confira se `audio` existe no nível principal do JSON e se o arquivo MP3/WAV/M4A
 
 ## 🗺️ Próximas melhorias
 
-- Transcrição local com Faster-Whisper.
-- Legendas estilo karaokê por palavra, com revisão manual.
 - Interface desktop em CustomTkinter.
 - Editor visual de cenas e pré-visualização.
 - Presets narrativos e efeitos parallax em múltiplas camadas.
