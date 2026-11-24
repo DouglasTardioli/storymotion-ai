@@ -11,10 +11,11 @@ def main():
     parser.add_argument("output", type=Path, help="Vídeo MP4 de saída")
     parser.add_argument("--ffmpeg", help="Caminho para o executável do FFmpeg")
     parser.add_argument("--crf", type=int, default=20, help="Qualidade H.264 (0–51)")
+    parser.add_argument("--export-srt", type=Path, help="Salva as legendas automáticas em um novo SRT")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        render(args.project, args.output, ffmpeg=args.ffmpeg, crf=args.crf)
+        render(args.project, args.output, ffmpeg=args.ffmpeg, crf=args.crf, export_srt=args.export_srt)
     except (OSError, ValueError, RuntimeError) as error:
         logging.error("%s", error)
         return 1

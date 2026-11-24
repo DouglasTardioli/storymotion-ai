@@ -1,2 +1,5 @@
 Pillow>=10.4,<14
 pydantic>=2.8,<3
+faster-whisper>=1.2,<2
+# Faster-Whisper 1.2 usa metadata_errors, removido no PyAV 19.
+av>=11,<19

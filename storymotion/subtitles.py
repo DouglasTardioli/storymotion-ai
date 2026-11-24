@@ -1,16 +1,26 @@
-"""SRT subtitles drawn as original frames, independent of FFmpeg/libass builds."""
+"""Legendas SRT e por palavra desenhadas nos quadros do vídeo."""
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-_TIMESTAMP = re.compile(r"^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$")
+from .motion import ease
+
+_TIMESTAMP = re.compile(r"^(\d{2,}):(\d{2}):(\d{2})[,.](\d{3})$")
+
+@dataclass(frozen=True)
+class Word:
+    start: float
+    end: float
+    text: str
+
 
 @dataclass(frozen=True)
 class Cue:
     start: float
     end: float
     text: str
+    words: tuple[Word, ...] = ()
 
 
 def _seconds(value: str) -> float:
@@ -48,6 +58,22 @@ def read_srt(path: Path) -> list[Cue]:
     return sorted(cues, key=lambda cue: cue.start)
 
 
+def _timestamp(seconds):
+    whole, millis = divmod(round(seconds * 1000), 1000)
+    minutes, seconds = divmod(whole, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
+
+
+def format_srt(cues, duration):
+    blocks = []
+    for cue in cues:
+        end = min(cue.end, duration)
+        if round(end * 1000) > round(cue.start * 1000):
+            blocks.append(f"{len(blocks) + 1}\n{_timestamp(cue.start)} --> {_timestamp(end)}\n{cue.text}\n")
+    return "\n".join(blocks)
+
+
 class SubtitlePainter:
     def __init__(self, cues, width, height, settings):
         self.cues = cues
@@ -74,6 +100,9 @@ class SubtitlePainter:
         if cue is None:
             return frame
         draw = ImageDraw.Draw(frame)
+        if self.settings.style == "karaoke":
+            self._paint_words(draw, cue, timestamp)
+            return frame
         settings = self.settings
         # wrap using pixel width rather than characters
         words = cue.text.split()
@@ -101,3 +130,37 @@ class SubtitlePainter:
                       fill=settings.color, stroke_width=settings.outline_width,
                       stroke_fill=settings.outline_color)
         return frame
+
+
+    def _paint_words(self, draw, cue, timestamp):
+        settings = self.settings
+        space = draw.textlength(" ", font=self.font)
+        lines = [[]]
+        widths = [0]
+        for word in cue.words:
+            width = draw.textlength(word.text, font=self.font)
+            line = lines[-1]
+            gap = space if line else 0
+            if line and widths[-1] + gap + width + 2 * settings.outline_width > self.width * .84:
+                lines.append([])
+                widths.append(0)
+                gap = 0
+            offset = widths[-1] + gap
+            lines[-1].append((word, offset))
+            widths[-1] = offset + width
+
+        active = next((word for word in reversed(cue.words)
+                       if word.start <= timestamp < word.end), None)
+        spacing = int(settings.font_size * 1.24)
+        for index, (line, width) in enumerate(zip(lines, widths)):
+            x = (self.width - width) / 2
+            y = self.height - settings.margin_bottom - (len(lines) - index) * spacing
+            for word, offset in line:
+                selected = word is active
+                rise = 0
+                if selected:
+                    phase = ease((timestamp - word.start) / min(.12, word.end - word.start))
+                    rise = round(settings.font_size * .12 * (1 - phase))
+                draw.text((x + offset, y - rise), word.text, anchor="la", font=self.font,
+                          fill=settings.highlight_color if selected else settings.color,
+                          stroke_width=settings.outline_width, stroke_fill=settings.outline_color)
